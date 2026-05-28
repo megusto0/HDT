@@ -1,0 +1,17 @@
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+bin/
+obj/
+*.user
+*.suo
+*.cache
+.tools/
+*.log
+verify-*.png
+docs/screenshots/*
+!docs/screenshots/.gitkeep

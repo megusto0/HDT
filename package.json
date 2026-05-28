@@ -1,0 +1,22 @@
+{
+  "name": "hdt-bg-tracker",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.3.0",
+  "scripts": {
+    "dev": "concurrently -n server,webapp -c gold,cyan \"corepack pnpm --filter server dev\" \"corepack pnpm --filter webapp dev\"",
+    "build": "corepack pnpm --filter server build && corepack pnpm --filter webapp build",
+    "lint": "corepack pnpm --filter server lint && corepack pnpm --filter webapp lint",
+    "test": "corepack pnpm --filter server test",
+    "seed": "corepack pnpm --filter server seed",
+    "assets:cards": "node scripts/sync-card-assets.mjs",
+    "start": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-production.ps1",
+    "service:install": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-service.ps1",
+    "service:uninstall": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/uninstall-service.ps1",
+    "service:status": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/service-status.ps1",
+    "service:verify": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/service-verify.ps1"
+  },
+  "devDependencies": {
+    "concurrently": "9.2.1"
+  }
+}

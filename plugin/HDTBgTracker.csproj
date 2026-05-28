@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <AssemblyName>HDTBgTracker</AssemblyName>
+    <RootNamespace>HDTBgTracker</RootNamespace>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <HdtAssemblyDir Condition="'$(HdtAssemblyDir)' == ''">$(LocalAppData)\HearthstoneDeckTracker\app-1.52.14</HdtAssemblyDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.8" />
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net472" Version="1.0.3" PrivateAssets="all" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="PresentationFramework" />
+    <Reference Include="PresentationCore" />
+    <Reference Include="WindowsBase" />
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="HearthstoneDeckTracker">
+      <HintPath>$(HdtAssemblyDir)\HearthstoneDeckTracker.exe</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="HearthDb">
+      <HintPath>$(HdtAssemblyDir)\HearthDb.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="HearthMirror">
+      <HintPath>$(HdtAssemblyDir)\HearthMirror.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <Target Name="ExplainMissingHdtAssemblies" BeforeTargets="ResolveReferences">
+    <Message Importance="High" Text="Using HdtAssemblyDir=$(HdtAssemblyDir)" />
+    <Warning Condition="!Exists('$(HdtAssemblyDir)\HearthstoneDeckTracker.exe')" Text="HDT assemblies were not found. Build with /p:HdtAssemblyDir=&quot;path\to\HDT&quot;." />
+  </Target>
+</Project>
