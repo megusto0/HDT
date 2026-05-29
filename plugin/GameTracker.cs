@@ -180,6 +180,10 @@ namespace HDTBgTracker
                 {
                     continue;
                 }
+                if (action.Event.EventType == "hero-selected")
+                {
+                    ApplySelectedHero(action.Event);
+                }
                 if (action.Purchase != null)
                 {
                     CapturePurchase(action.Purchase);
@@ -249,6 +253,22 @@ namespace HDTBgTracker
             _store.WriteTrackerEvent(_current.Id, trackerEvent);
             Logging.Info($"Captured tracker event {trackerEvent.EventType}: {trackerEvent.CardName} ({trackerEvent.CardId}) on turn {trackerEvent.TurnNumber}");
             return true;
+        }
+
+        private void ApplySelectedHero(TrackerActionEvent trackerEvent)
+        {
+            if (_current == null || !IsLikelyHeroCardId(trackerEvent.CardId)) return;
+            var heroName = ResolveHeroName(trackerEvent.CardId, trackerEvent.CardName);
+            if (string.Equals(_current.HeroId, trackerEvent.CardId, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(_current.HeroName, heroName, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            _current.HeroId = trackerEvent.CardId;
+            _current.HeroName = heroName;
+            _store.UpsertGame(_current);
+            Logging.Info($"Resolved player hero for game {_current.Id}: {_current.HeroName} ({_current.HeroId}) from {trackerEvent.Source}");
         }
 
         private void CapturePurchase(PurchaseEvent purchase)
@@ -455,8 +475,9 @@ namespace HDTBgTracker
             {
                 var controller = SafeController(entity);
                 var controlledByPlayer = playerId > 0 && (controller == playerId || IsControlledBy(entity, playerId));
+                var isSelectedZone = IsSelectedHeroZone(SafeZone(entity));
                 var hasLeaderboardPlace = HasTag(entity, GameTag.PLAYER_LEADERBOARD_PLACE);
-                if (controlledByPlayer)
+                if (controlledByPlayer && isSelectedZone)
                 {
                     AddHeroCandidateFromObject(candidates, entity, hasLeaderboardPlace ? "controlled leaderboard hero entity" : "controlled hero entity", hasLeaderboardPlace ? 118 : 108);
                 }
@@ -548,6 +569,7 @@ namespace HDTBgTracker
             var cardId = GetString(entity, "CardId");
             if (IsUnknownHero(cardId)) return false;
             if (!IsHeroEntity(entity)) return false;
+            if (!IsSelectedHeroZone(SafeZone(entity))) return false;
             var controller = SafeController(entity);
             return controller == playerId || IsControlledBy(entity, playerId);
         }
@@ -572,6 +594,11 @@ namespace HDTBgTracker
             if (IsUnknownHero(value)) return false;
             var id = value!.Trim();
             return id.IndexOf("HERO", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static bool IsSelectedHeroZone(Zone zone)
+        {
+            return zone == Zone.PLAY;
         }
 
         private static object[] ReadEntities(object game)

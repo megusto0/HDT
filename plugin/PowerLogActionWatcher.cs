@@ -30,6 +30,14 @@ namespace HDTBgTracker
             @"TAG_CHANGE Entity=\[entityName=(?<name>.*?) id=(?<id>\d+) zone=(?<fromZone>\S+) zonePos=(?<zonePos>-?\d+) cardId=(?<cardId>\S+) player=(?<player>\d+)\] tag=ZONE value=HAND",
             RegexOptions.Compiled);
 
+        private static readonly Regex HeroZoneToPlayRegex = new Regex(
+            @"TAG_CHANGE Entity=\[entityName=(?<name>.*?) id=(?<id>\d+) zone=(?<fromZone>\S+) zonePos=(?<zonePos>-?\d+) cardId=(?<cardId>\S+) player=(?<player>\d+)\] tag=ZONE value=PLAY",
+            RegexOptions.Compiled);
+
+        private static readonly Regex HeroLeaderboardRegex = new Regex(
+            @"TAG_CHANGE Entity=\[entityName=(?<name>.*?) id=(?<id>\d+) zone=(?<fromZone>\S+) zonePos=(?<zonePos>-?\d+) cardId=(?<cardId>\S+) player=(?<player>\d+)\] tag=PLAYER_LEADERBOARD_PLACE value=\d+",
+            RegexOptions.Compiled);
+
         private string? _filePath;
         private long _offset;
         private string _pending = "";
@@ -131,6 +139,18 @@ namespace HDTBgTracker
                 return ParseBlockStart(block, line, turnNumber, playerId);
             }
 
+            var selectedHero = HeroZoneToPlayRegex.Match(line);
+            if (selectedHero.Success && ReadInt(selectedHero, "player") == playerId && IsLikelyHeroCardId(selectedHero.Groups["cardId"].Value))
+            {
+                return HeroSelectedAction(selectedHero, line, turnNumber, "power-log:hero-zone-play");
+            }
+
+            var leaderboardHero = HeroLeaderboardRegex.Match(line);
+            if (leaderboardHero.Success && ReadInt(leaderboardHero, "player") == playerId && IsLikelyHeroCardId(leaderboardHero.Groups["cardId"].Value))
+            {
+                return HeroSelectedAction(leaderboardHero, line, turnNumber, "power-log:hero-leaderboard");
+            }
+
             var gained = ZoneToHandRegex.Match(line);
             if (gained.Success && ReadInt(gained, "player") == playerId && IsInterestingCard(gained.Groups["cardId"].Value))
             {
@@ -152,6 +172,25 @@ namespace HDTBgTracker
             }
 
             return null;
+        }
+
+        private static PowerLogAction HeroSelectedAction(Match match, string line, int turnNumber, string source)
+        {
+            var cardId = match.Groups["cardId"].Value;
+            var cardName = ResolveCardName(cardId, match.Groups["name"].Value);
+            return new PowerLogAction
+            {
+                Event = new TrackerActionEvent
+                {
+                    TurnNumber = turnNumber,
+                    EventType = "hero-selected",
+                    CardId = cardId,
+                    CardName = cardName,
+                    EntityId = ReadInt(match, "id"),
+                    Source = source,
+                    RawJson = Raw(line)
+                }
+            };
         }
 
         private PowerLogAction? ParseBlockStart(Match block, string line, int turnNumber, int playerId)
@@ -374,6 +413,14 @@ namespace HDTBgTracker
                 || cardId.StartsWith("TB_BaconShop", StringComparison.OrdinalIgnoreCase)
                 || cardId.StartsWith("EBG", StringComparison.OrdinalIgnoreCase)
                 || cardId.StartsWith("BGS", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsLikelyHeroCardId(string cardId)
+        {
+            if (string.IsNullOrWhiteSpace(cardId)) return false;
+            return cardId.IndexOf("HERO", StringComparison.OrdinalIgnoreCase) >= 0
+                && cardId.IndexOf("HERO_PH", StringComparison.OrdinalIgnoreCase) < 0
+                && cardId.IndexOf("_Buddy", StringComparison.OrdinalIgnoreCase) < 0;
         }
 
         private static int ResolveTier(string cardId)
