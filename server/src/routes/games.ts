@@ -164,7 +164,10 @@ export function gamesRouter(db: Database.Database) {
         offered: normalizeTrinketOffers(trinket.offered_json, trinket.selected_card_id)
       })
     );
-    res.json({ game: sanitizeMmrGame(sanitizeGameHero(game as any)), turns, purchases, upgrades, combats, trinkets });
+    const trackerEvents = db
+      .prepare('SELECT * FROM tracker_events WHERE game_id = ? ORDER BY turn_number ASC, id ASC')
+      .all(req.params.id);
+    res.json({ game: sanitizeMmrGame(sanitizeGameHero(game as any)), turns, purchases, upgrades, combats, trinkets, trackerEvents });
   });
 
   return router;

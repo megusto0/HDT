@@ -23,5 +23,6 @@ namespace HDTBgTracker.Models
         public List<UpgradeEvent> Upgrades { get; set; } = new List<UpgradeEvent>();
         public List<CombatResult> Combats { get; set; } = new List<CombatResult>();
         public List<TrinketChoice> Trinkets { get; set; } = new List<TrinketChoice>();
+        public List<TrackerActionEvent> TrackerEvents { get; set; } = new List<TrackerActionEvent>();
     }
 }

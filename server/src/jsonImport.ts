@@ -48,6 +48,8 @@ type RawDump = {
   upgrades?: Record<string, unknown>[];
   combats?: Record<string, unknown>[];
   trinkets?: Record<string, unknown>[];
+  tracker_events?: Record<string, unknown>[];
+  trackerEvents?: Record<string, unknown>[];
 };
 
 function text(value: unknown, fallback = '') {
@@ -169,11 +171,18 @@ export function importGameDumps(db: Database.Database) {
     INSERT INTO trinkets (game_id, turn_number, slot, selected_card_id, selected_name, offered_json, source)
     VALUES (@game_id, @turn_number, @slot, @selected_card_id, @selected_name, @offered_json, @source)
   `);
+  const insertTrackerEvent = db.prepare(`
+    INSERT INTO tracker_events
+      (game_id, turn_number, event_type, card_id, card_name, entity_id, target_card_id, target_name, target_entity_id, source, raw_json, created_at)
+    VALUES
+      (@game_id, @turn_number, @event_type, @card_id, @card_name, @entity_id, @target_card_id, @target_name, @target_entity_id, @source, @raw_json, @created_at)
+  `);
   const deleteTurns = db.prepare('DELETE FROM turns WHERE game_id = @id');
   const deletePurchases = db.prepare('DELETE FROM purchases WHERE game_id = @id');
   const deleteUpgrades = db.prepare('DELETE FROM upgrades WHERE game_id = @id');
   const deleteCombats = db.prepare('DELETE FROM combats WHERE game_id = @id');
   const deleteTrinkets = db.prepare('DELETE FROM trinkets WHERE game_id = @id');
+  const deleteTrackerEvents = db.prepare('DELETE FROM tracker_events WHERE game_id = @id');
 
   let games = 0;
   let turns = 0;
@@ -203,6 +212,7 @@ export function importGameDumps(db: Database.Database) {
       deleteUpgrades.run({ id });
       deleteCombats.run({ id });
       deleteTrinkets.run({ id });
+      deleteTrackerEvents.run({ id });
 
       const importedTurns = validTurns(raw.turns ?? []);
       for (const turn of importedTurns) {
@@ -285,6 +295,25 @@ export function importGameDumps(db: Database.Database) {
           selected_name: text(trinket.selected_name ?? trinket.selectedName) || null,
           offered_json: typeof offered === 'string' ? offered : JSON.stringify(offered),
           source: text(trinket.source, 'json')
+        });
+      }
+      for (const event of raw.tracker_events ?? raw.trackerEvents ?? []) {
+        const eventType = text(event.event_type ?? event.eventType);
+        if (!eventType) continue;
+        const rawJson = event.raw_json ?? event.rawJson;
+        insertTrackerEvent.run({
+          game_id: id,
+          turn_number: numberOr(event.turn_number ?? event.turnNumber),
+          event_type: eventType,
+          card_id: text(event.card_id ?? event.cardId) || null,
+          card_name: text(event.card_name ?? event.cardName) || null,
+          entity_id: numberOrNull(event.entity_id ?? event.entityId),
+          target_card_id: text(event.target_card_id ?? event.targetCardId) || null,
+          target_name: text(event.target_name ?? event.targetName) || null,
+          target_entity_id: numberOrNull(event.target_entity_id ?? event.targetEntityId),
+          source: text(event.source, 'json'),
+          raw_json: typeof rawJson === 'string' ? rawJson : rawJson ? JSON.stringify(rawJson) : null,
+          created_at: text(event.created_at ?? event.createdAt, new Date(0).toISOString())
         });
       }
       games += 1;

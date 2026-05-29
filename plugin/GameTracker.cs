@@ -10,6 +10,7 @@ using Hearthstone_Deck_Tracker.Enums;
 using HearthDb.Enums;
 using Newtonsoft.Json;
 using HdtCore = Hearthstone_Deck_Tracker.Core;
+using HdtCard = Hearthstone_Deck_Tracker.Hearthstone.Card;
 
 namespace HDTBgTracker
 {
@@ -18,8 +19,10 @@ namespace HDTBgTracker
         private readonly DataStore _store;
         private readonly Timer _pollTimer;
         private readonly ShopWatcher _shopWatcher = new ShopWatcher();
+        private readonly PowerLogActionWatcher _powerLogActionWatcher = new PowerLogActionWatcher();
         private readonly object _sync = new object();
         private readonly HashSet<string> _trinketKeys = new HashSet<string>();
+        private readonly HashSet<string> _eventKeys = new HashSet<string>();
         private GameRecord? _current;
         private int _lastTurn;
         private bool _ending;
@@ -37,6 +40,10 @@ namespace HDTBgTracker
             GameEvents.OnGameStart.Add(OnGameStart);
             GameEvents.OnGameEnd.Add(OnGameEnd);
             GameEvents.OnTurnStart.Add(OnTurnStart);
+            GameEvents.OnPlayerGet.Add(card => CaptureCardEvent("player-get", card));
+            GameEvents.OnPlayerPlay.Add(card => CaptureCardEvent("player-play", card));
+            GameEvents.OnPlayerPlayToHand.Add(card => CaptureCardEvent("player-play-to-hand", card));
+            GameEvents.OnPlayerCreateInPlay.Add(card => CaptureCardEvent("player-create-in-play", card));
             _pollTimer.Start();
             Logging.Info("GameTracker started");
         }
@@ -76,7 +83,9 @@ namespace HDTBgTracker
                     _lastTurn = 0;
                     _ending = false;
                     _shopWatcher.Reset();
+                    _powerLogActionWatcher.ResetToLatestLogEnd();
                     _trinketKeys.Clear();
+                    _eventKeys.Clear();
                     Logging.Info("BG game started: " + _current.Id);
                 }
             }
@@ -140,17 +149,16 @@ namespace HDTBgTracker
                 {
                     CaptureTurn();
                     TryCaptureTrinkets(Math.Max(1, _lastTurn));
+                    CapturePowerLogActions();
                     foreach (var evt in _shopWatcher.Diff(HdtCore.Game, _lastTurn))
                     {
                         if (evt.Purchase != null)
                         {
-                            _current.Purchases.Add(evt.Purchase);
-                            _store.WritePurchase(_current.Id, evt.Purchase);
+                            CapturePurchase(evt.Purchase);
                         }
                         if (evt.Upgrade != null)
                         {
-                            _current.Upgrades.Add(evt.Upgrade);
-                            _store.WriteUpgrade(_current.Id, evt.Upgrade);
+                            CaptureUpgrade(evt.Upgrade);
                         }
                     }
                 }
@@ -159,6 +167,113 @@ namespace HDTBgTracker
                     _polling = false;
                 }
             }
+        }
+
+        private void CapturePowerLogActions()
+        {
+            if (_current == null || !IsBattlegrounds()) return;
+            var playerId = TryReadInt(HdtCore.Game.Player, "Id") ?? -1;
+            var turn = Math.Max(1, _lastTurn > 0 ? _lastTurn : HdtCore.Game.GetTurnNumber());
+            foreach (var action in _powerLogActionWatcher.Drain(turn, playerId))
+            {
+                if (!CaptureTrackerEvent(action.Event))
+                {
+                    continue;
+                }
+                if (action.Purchase != null)
+                {
+                    CapturePurchase(action.Purchase);
+                }
+                if (action.Upgrade != null)
+                {
+                    CaptureUpgrade(action.Upgrade);
+                }
+            }
+        }
+
+        private void CaptureCardEvent(string eventType, HdtCard card)
+        {
+            try
+            {
+                lock (_sync)
+                {
+                    if (_current == null || _ending || !IsBattlegrounds()) return;
+                    var cardId = card.Id ?? "";
+                    if (string.IsNullOrWhiteSpace(cardId)) return;
+                    var cardName = !string.IsNullOrWhiteSpace(card.LocalizedName)
+                        ? card.LocalizedName!
+                        : !string.IsNullOrWhiteSpace(card.Name)
+                            ? card.Name!
+                            : cardId;
+                    CaptureTrackerEvent(new TrackerActionEvent
+                    {
+                        TurnNumber = Math.Max(1, _lastTurn > 0 ? _lastTurn : HdtCore.Game.GetTurnNumber()),
+                        EventType = eventType,
+                        CardId = cardId,
+                        CardName = cardName,
+                        Source = "hdt-game-events",
+                        RawJson = JsonConvert.SerializeObject(new
+                        {
+                            id = cardId,
+                            name = card.Name,
+                            localized_name = card.LocalizedName,
+                            tech_level = card.TechLevel,
+                            type = card.Type,
+                            is_bacon_minion = card.IsBaconMinion
+                        })
+                    });
+                }
+            }
+            catch (Exception exception)
+            {
+                Logging.Error(exception, "CaptureCardEvent failed");
+            }
+        }
+
+        private bool CaptureTrackerEvent(TrackerActionEvent trackerEvent)
+        {
+            if (_current == null) return false;
+            if (trackerEvent.TurnNumber <= 0)
+            {
+                trackerEvent.TurnNumber = Math.Max(1, _lastTurn);
+            }
+            if (trackerEvent.CreatedAt == default)
+            {
+                trackerEvent.CreatedAt = DateTime.UtcNow;
+            }
+            if (!_eventKeys.Add(trackerEvent.DedupKey))
+            {
+                return false;
+            }
+            _current.TrackerEvents.Add(trackerEvent);
+            _store.WriteTrackerEvent(_current.Id, trackerEvent);
+            Logging.Info($"Captured tracker event {trackerEvent.EventType}: {trackerEvent.CardName} ({trackerEvent.CardId}) on turn {trackerEvent.TurnNumber}");
+            return true;
+        }
+
+        private void CapturePurchase(PurchaseEvent purchase)
+        {
+            if (_current == null) return;
+            var key = $"purchase:{purchase.TurnNumber}:{purchase.CardId}:{purchase.CardName}:{purchase.Source}";
+            if (!_eventKeys.Add(key))
+            {
+                return;
+            }
+            _current.Purchases.Add(purchase);
+            _store.WritePurchase(_current.Id, purchase);
+            Logging.Info($"Captured purchase {purchase.CardName} ({purchase.CardId}) on turn {purchase.TurnNumber} from {purchase.Source}");
+        }
+
+        private void CaptureUpgrade(UpgradeEvent upgrade)
+        {
+            if (_current == null) return;
+            var key = $"upgrade:{upgrade.TurnNumber}:{upgrade.FromTier}:{upgrade.ToTier}:{upgrade.GoldPaid}";
+            if (!_eventKeys.Add(key))
+            {
+                return;
+            }
+            _current.Upgrades.Add(upgrade);
+            _store.WriteUpgrade(_current.Id, upgrade);
         }
 
         private void CaptureTurn()

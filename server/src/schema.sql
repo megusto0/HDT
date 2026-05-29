@@ -70,8 +70,26 @@ CREATE TABLE IF NOT EXISTS trinkets (
   UNIQUE (game_id, slot, selected_card_id)
 );
 
+CREATE TABLE IF NOT EXISTS tracker_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  game_id TEXT NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+  turn_number INTEGER NOT NULL,
+  event_type TEXT NOT NULL,
+  card_id TEXT,
+  card_name TEXT,
+  entity_id INTEGER,
+  target_card_id TEXT,
+  target_name TEXT,
+  target_entity_id INTEGER,
+  source TEXT NOT NULL,
+  raw_json TEXT,
+  created_at TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_games_hero ON games(hero_id);
 CREATE INDEX IF NOT EXISTS idx_games_started ON games(started_at);
 CREATE INDEX IF NOT EXISTS idx_purchases_card ON purchases(card_id);
 CREATE INDEX IF NOT EXISTS idx_purchases_turn ON purchases(turn_number);
 CREATE INDEX IF NOT EXISTS idx_trinkets_game ON trinkets(game_id);
+CREATE INDEX IF NOT EXISTS idx_tracker_events_game ON tracker_events(game_id);
+CREATE INDEX IF NOT EXISTS idx_tracker_events_type ON tracker_events(event_type);

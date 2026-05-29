@@ -152,6 +152,27 @@ namespace HDTBgTracker
             });
         }
 
+        public void WriteTrackerEvent(string gameId, TrackerActionEvent trackerEvent)
+        {
+            ExecuteEvent(@"INSERT INTO tracker_events
+                (game_id, turn_number, event_type, card_id, card_name, entity_id, target_card_id, target_name, target_entity_id, source, raw_json, created_at)
+                VALUES ($game_id, $turn_number, $event_type, $card_id, $card_name, $entity_id, $target_card_id, $target_name, $target_entity_id, $source, $raw_json, $created_at)", command =>
+            {
+                Add(command, "$game_id", gameId);
+                Add(command, "$turn_number", trackerEvent.TurnNumber);
+                Add(command, "$event_type", trackerEvent.EventType);
+                Add(command, "$card_id", trackerEvent.CardId);
+                Add(command, "$card_name", trackerEvent.CardName);
+                Add(command, "$entity_id", trackerEvent.EntityId);
+                Add(command, "$target_card_id", string.IsNullOrWhiteSpace(trackerEvent.TargetCardId) ? null : trackerEvent.TargetCardId);
+                Add(command, "$target_name", string.IsNullOrWhiteSpace(trackerEvent.TargetName) ? null : trackerEvent.TargetName);
+                Add(command, "$target_entity_id", trackerEvent.TargetEntityId);
+                Add(command, "$source", trackerEvent.Source);
+                Add(command, "$raw_json", trackerEvent.RawJson);
+                Add(command, "$created_at", trackerEvent.CreatedAt.ToUniversalTime().ToString("O"));
+            });
+        }
+
         public string WriteJsonDump(GameRecord game)
         {
             Directory.CreateDirectory(_gamesDir);
@@ -180,7 +201,8 @@ namespace HDTBgTracker
                 purchases = game.Purchases,
                 upgrades = game.Upgrades,
                 combats = game.Combats,
-                trinkets = game.Trinkets
+                trinkets = game.Trinkets,
+                tracker_events = game.TrackerEvents
             };
             File.WriteAllText(path, JsonConvert.SerializeObject(payload, JsonSettings));
             return path;
@@ -297,6 +319,23 @@ CREATE INDEX IF NOT EXISTS idx_games_started ON games(started_at);
 CREATE INDEX IF NOT EXISTS idx_purchases_card ON purchases(card_id);
 CREATE INDEX IF NOT EXISTS idx_purchases_turn ON purchases(turn_number);
 CREATE INDEX IF NOT EXISTS idx_trinkets_game ON trinkets(game_id);
+CREATE TABLE IF NOT EXISTS tracker_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  game_id TEXT NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+  turn_number INTEGER NOT NULL,
+  event_type TEXT NOT NULL,
+  card_id TEXT,
+  card_name TEXT,
+  entity_id INTEGER,
+  target_card_id TEXT,
+  target_name TEXT,
+  target_entity_id INTEGER,
+  source TEXT NOT NULL,
+  raw_json TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_tracker_events_game ON tracker_events(game_id);
+CREATE INDEX IF NOT EXISTS idx_tracker_events_type ON tracker_events(event_type);
 ";
     }
 }

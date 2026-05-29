@@ -104,6 +104,7 @@ export default function GameDetail() {
   const purchaseSummary = game.data.purchases.length ? String(game.data.purchases.length) : 'не записываются';
   const combatSummary = game.data.combats.length ? String(game.data.combats.length) : 'не записываются';
   const upgradeSummary = derivedUpgrades ? `${game.data.upgrades.length} (по кривой таверны)` : String(game.data.upgrades.length);
+  const trackerEventSummary = game.data.trackerEvents.length ? String(game.data.trackerEvents.length) : 'нет';
   const heroIsKnown = game.data.game.hero_id !== 'unknown' && game.data.game.hero_name !== 'Unknown Hero';
   const heroTitle = heroIsKnown ? game.data.game.hero_name : 'Матч без героя';
   const chartTurns = [...game.data.turns];
@@ -199,11 +200,26 @@ export default function GameDetail() {
             </div>
             <aside>
               <h3>Итог матча</h3>
-              <p>Покупок: {purchaseSummary}. Улучшений таверны: {upgradeSummary}. Боёв: {combatSummary}. Тринкетов: {game.data.trinkets.length}.</p>
+              <p>Покупок: {purchaseSummary}. Улучшений таверны: {upgradeSummary}. Боёв: {combatSummary}. Тринкетов: {game.data.trinkets.length}. Событий HDT: {trackerEventSummary}.</p>
               <p>JSON-аудит: {game.data.game.raw_json_path ?? 'будет создан плагином после реальной партии'}.</p>
             </aside>
           </div>
         </Panel>
+
+        {game.data.trackerEvents.length ? (
+          <Panel title="События HDT" code="§ E">
+            <div className="tracker-event-list">
+              {game.data.trackerEvents.slice(-80).map((event) => (
+                <article key={event.id} className="tracker-event-row">
+                  <span className="mono">Х{event.turn_number}</span>
+                  <strong>{event.event_type}</strong>
+                  <span>{event.target_name || event.card_name || event.target_card_id || event.card_id || 'без карты'}</span>
+                  <em>{event.source}</em>
+                </article>
+              ))}
+            </div>
+          </Panel>
+        ) : null}
       </div>
     </>
   );

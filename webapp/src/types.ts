@@ -105,6 +105,21 @@ export type GameDetailResponse = {
       zone: string | null;
     }[];
   }[];
+  trackerEvents: {
+    id: number;
+    game_id: string;
+    turn_number: number;
+    event_type: string;
+    card_id: string | null;
+    card_name: string | null;
+    entity_id: number | null;
+    target_card_id: string | null;
+    target_name: string | null;
+    target_entity_id: number | null;
+    source: string;
+    raw_json: string | null;
+    created_at: string;
+  }[];
 };
 
 export type CurveStats = {
