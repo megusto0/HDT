@@ -133,11 +133,33 @@ export type CurveStats = {
   }[];
 };
 
+export type BucketStats = {
+  games: number;
+  top4Rate: number;
+  avgPlacement: number;
+};
+
+export type TierTransition = {
+  tier: number;
+  benchmarkTurn: number;
+  benchmarkLabel: string;
+  tempoCritical: boolean;
+  games: number;
+  avgTurn: number | null;
+  medianTurn: number | null;
+  avgHealthAtLevel: number | null;
+  distribution: { turn: number; count: number }[];
+  onPace: BucketStats;
+  behind: BucketStats;
+};
+
 export type LevelingCurvesResponse = {
   baseline: {
     overallAvgPlacement: number;
     totalGames: number;
+    standardCurveRate: number;
   };
+  transitions: TierTransition[];
   archetypes: CurveStats[];
 };
 

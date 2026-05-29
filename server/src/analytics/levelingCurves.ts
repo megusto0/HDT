@@ -28,6 +28,22 @@ export type CurveStats = {
   commonMinions: { cardId: string; cardName: string; phase: 'early' | 'mid' | 'late'; count: number }[];
 };
 
+type BucketStats = { games: number; top4Rate: number; avgPlacement: number };
+
+export type TierTransition = {
+  tier: number;
+  benchmarkTurn: number;
+  benchmarkLabel: string;
+  tempoCritical: boolean;
+  games: number;
+  avgTurn: number | null;
+  medianTurn: number | null;
+  avgHealthAtLevel: number | null;
+  distribution: { turn: number; count: number }[];
+  onPace: BucketStats;
+  behind: BucketStats;
+};
+
 type TurnRecord = {
   game_id: string;
   turn_number: number;
@@ -71,6 +87,18 @@ const archetypeOrder = [
   'late-tier-6',
   'other'
 ];
+
+// Pro-guide reference timings. `turn` is the latest turn that still counts as
+// keeping pace with the lobby; `tempoCritical` marks the tiers where the guide
+// says the turn number itself matters (T2–T4) versus the board-state decisions
+// for T5/T6 ("what am I leveling for" / "will I die").
+const TIER_BENCHMARKS: Record<number, { turn: number; label: string; tempoCritical: boolean }> = {
+  2: { turn: 2, label: 'Turn 2', tempoCritical: true },
+  3: { turn: 5, label: 'Turns 3–5', tempoCritical: true },
+  4: { turn: 7, label: 'Turns 5–7', tempoCritical: true },
+  5: { turn: 9, label: 'Turns 7–9', tempoCritical: false },
+  6: { turn: 11, label: 'Turn 10+', tempoCritical: false }
+};
 
 function firstTierTurns(turns: TurnRecord[]): TierTurns {
   const result: TierTurns = { t2: null, t3: null, t4: null, t5: null, t6: null };
@@ -247,6 +275,55 @@ function commonMinions(
   return [...counts.values()].sort((a, b) => b.count - a.count || a.cardName.localeCompare(b.cardName)).slice(0, 5);
 }
 
+function bucketStats(placements: number[]): BucketStats {
+  if (placements.length === 0) return { games: 0, top4Rate: 0, avgPlacement: 0 };
+  return {
+    games: placements.length,
+    top4Rate: Number((placements.filter((p) => p <= 4).length / placements.length).toFixed(4)),
+    avgPlacement: Number(average(placements).toFixed(2))
+  };
+}
+
+function computeTransitions(games: CurveGame[], healthByGameTurn: Map<string, number>): TierTransition[] {
+  return [2, 3, 4, 5, 6].map((tier) => {
+    const key = `t${tier}` as keyof TierTurns;
+    const benchmark = TIER_BENCHMARKS[tier];
+    const reached = games
+      .map((game) => ({ turn: game.turns[key], placement: game.placement, id: game.id }))
+      .filter((entry): entry is { turn: number; placement: number | null; id: string } => entry.turn !== null);
+
+    const turns = reached.map((entry) => entry.turn);
+    const distMap = new Map<number, number>();
+    for (const turn of turns) distMap.set(turn, (distMap.get(turn) ?? 0) + 1);
+    const distribution = [...distMap.entries()].sort((a, b) => a[0] - b[0]).map(([turn, count]) => ({ turn, count }));
+
+    const healthValues = reached
+      .map((entry) => healthByGameTurn.get(`${entry.id}:${entry.turn}`))
+      .filter((value): value is number => value !== undefined);
+
+    const onPacePlacements = reached
+      .filter((entry) => entry.turn <= benchmark.turn && entry.placement !== null)
+      .map((entry) => entry.placement as number);
+    const behindPlacements = reached
+      .filter((entry) => entry.turn > benchmark.turn && entry.placement !== null)
+      .map((entry) => entry.placement as number);
+
+    return {
+      tier,
+      benchmarkTurn: benchmark.turn,
+      benchmarkLabel: benchmark.label,
+      tempoCritical: benchmark.tempoCritical,
+      games: reached.length,
+      avgTurn: turns.length ? Number(average(turns).toFixed(2)) : null,
+      medianTurn: turns.length ? Number(median(turns).toFixed(1)) : null,
+      avgHealthAtLevel: healthValues.length ? Math.round(average(healthValues)) : null,
+      distribution,
+      onPace: bucketStats(onPacePlacements),
+      behind: bucketStats(behindPlacements)
+    };
+  });
+}
+
 export function getLevelingCurves(db: Database.Database) {
   const gameRows = db
     .prepare('SELECT id, started_at, hero_id, hero_name, placement FROM games WHERE placement IS NOT NULL ORDER BY started_at DESC')
@@ -259,6 +336,13 @@ export function getLevelingCurves(db: Database.Database) {
   const purchaseRows = db
     .prepare('SELECT game_id, turn_number, card_id, card_name FROM purchases ORDER BY turn_number ASC')
     .all() as PurchaseRecord[];
+  const healthRows = db.prepare('SELECT game_id, turn_number, health FROM turns').all() as {
+    game_id: string;
+    turn_number: number;
+    health: number;
+  }[];
+  const healthByGameTurn = new Map<string, number>();
+  for (const row of healthRows) healthByGameTurn.set(`${row.game_id}:${row.turn_number}`, row.health);
   const turnsByGame = new Map<string, TurnRecord[]>();
   for (const turn of turnRows) {
     const list = turnsByGame.get(turn.game_id) ?? [];
@@ -279,16 +363,25 @@ export function getLevelingCurves(db: Database.Database) {
   }
 
   const grouped = new Map<string, CurveGame[]>();
+  const allCurveGames: CurveGame[] = [];
   for (const game of knownGameRows) {
     const clean = actionTurns(turnsByGame.get(game.id) ?? []);
     turnsByGame.set(game.id, clean);
     const turns = firstTierTurns(clean);
     if (!hasReliableCurve(turns)) continue;
+    const curveGame: CurveGame = { ...game, turns };
+    allCurveGames.push(curveGame);
     const archetype = classifyCurve(turns);
     const list = grouped.get(archetype) ?? [];
-    list.push({ ...game, turns });
+    list.push(curveGame);
     grouped.set(archetype, list);
   }
+
+  const transitions = computeTransitions(allCurveGames, healthByGameTurn);
+  const reachedT2 = allCurveGames.filter((game) => game.turns.t2 !== null);
+  const standardCurveRate = reachedT2.length
+    ? Number((reachedT2.filter((game) => (game.turns.t2 as number) <= 2).length / reachedT2.length).toFixed(4))
+    : 0;
 
   const completePlacements = knownGameRows.map((game) => game.placement).filter((placement): placement is number => placement !== null);
   const archetypes = [...grouped.entries()]
@@ -317,8 +410,10 @@ export function getLevelingCurves(db: Database.Database) {
   return {
     baseline: {
       overallAvgPlacement: completePlacements.length ? Number(average(completePlacements).toFixed(2)) : 0,
-      totalGames: completePlacements.length
+      totalGames: completePlacements.length,
+      standardCurveRate
     },
+    transitions,
     archetypes
   };
 }

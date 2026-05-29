@@ -26,13 +26,13 @@ const heroes = [
 ];
 
 const minions = [
-  { cardId: 'BG31_807', name: 'Бесшабашный геомант', tier: 1, tribe: 'Elemental' },
-  { cardId: 'BG29_872', name: 'Мурлок-разведчик', tier: 2, tribe: 'Murloc' },
-  { cardId: 'BG30_116', name: 'Ночной кошмар', tier: 3, tribe: 'Beast' },
-  { cardId: 'BG31_185', name: 'Золотой ловец', tier: 4, tribe: 'Pirate' },
-  { cardId: 'BG32_291', name: 'Хроматический дракон', tier: 5, tribe: 'Dragon' },
-  { cardId: 'BG30_543', name: 'Заводной страж', tier: 3, tribe: 'Mech' },
-  { cardId: 'BG31_450', name: 'Певица таверны', tier: 4, tribe: 'Neutral' }
+  { cardId: 'BG_GVG_085', name: 'Annoy-o-Tron', tier: 1, tribe: 'Mech' },
+  { cardId: 'BG25_040', name: 'Blazing Skyfin', tier: 2, tribe: 'Murloc' },
+  { cardId: 'BG24_500', name: 'Amber Guardian', tier: 3, tribe: 'Dragon' },
+  { cardId: 'BG26_802', name: 'Banana Slamma', tier: 4, tribe: 'Beast' },
+  { cardId: 'BG28_905', name: 'Bazaar Dealer', tier: 5, tribe: 'Demon' },
+  { cardId: 'BG26_175', name: 'Elemental of Surprise', tier: 6, tribe: 'Elemental' },
+  { cardId: 'BG26_147', name: 'Accord-o-Tron', tier: 3, tribe: 'Mech' }
 ];
 
 function board(seed: number, count: number): BoardMinion[] {

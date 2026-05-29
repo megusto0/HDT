@@ -170,10 +170,6 @@ export default function GameDetail() {
                     <span className="row-label">стол</span>
                     <BoardView minions={turn.board} />
                   </div>
-                  <div>
-                    <span className="row-label">магазин</span>
-                    <BoardView minions={turn.shop} />
-                  </div>
                   <p>{purchaseByTurn.get(turn.turn_number)?.join(' · ') ?? 'без событий'}</p>
                 </article>
               ))}
